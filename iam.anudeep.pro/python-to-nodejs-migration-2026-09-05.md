@@ -4,7 +4,7 @@
 **Source:** `iam.anudeep.pro_python` (branch `python`, `c815c41`) — FastAPI / SQLAlchemy / Python 3.13
 **Target:** `iam.anudeep.pro` — Fastify / Drizzle / TypeScript on Node 24 LTS
 **Revised:** 2026-09-05 after the nine-point review — see `migration-review-analysis-2026-09-05.md`
-**Status:** Design approved; implementation not started
+**Status:** Stage 1 complete (scaffold running, 7 tests green). Revised after the nine-point review; stage 1b applies its version decisions.
 
 ---
 
@@ -103,9 +103,14 @@ keeps credentials out of telemetry. Those are enumerated in (c.d).
 **Selected: Zod.** The deciding factor is that this port carries three pydantic features that
 are not plain shape validation: `_parse_json_list` (accept a JSON array *or* a comma-separated
 string), `_coerce_asyncpg` (rewrite a URL scheme), and `_ceiling_outlives_the_window` (a
-cross-field check that refuses a bad TTL pair at boot). Plus schema inheritance —
-`BrowserStartResponse` subclasses `StartResponse` precisely so the two surfaces cannot drift.
-Zod expresses all four directly; TypeBox would fight each one.
+cross-field check that refuses a bad TTL pair at boot). Zod expresses all three directly with
+`.transform()` and `.superRefine()`; TypeBox would fight each one.
+
+*A fourth reason has since evaporated and is recorded rather than quietly dropped.* This
+originally also cited schema inheritance — `BrowserStartResponse` extending `StartResponse` so
+the HTML and JSON surfaces could not drift. The review moved the UI to HTML-only, so those
+subclasses are not ported and inheritance is no longer needed. The three validators are enough
+on their own; had inheritance been the *only* argument, TypeBox would now be the better pick.
 
 ### b.3 — Database access
 
@@ -212,12 +217,16 @@ friction.
                           │                                      │
                           │  plugins (≈ routers):                 │
                           │   health   /healthz /readyz           │
-                          │   v1       /v1/*                      │
-                          │   auth     /api/v1/auth/*             │
-                          │   validate /v1/validate               │
-                          │   login    /login/* /register  (HTML) │
-                          └───────┬───────────────────┬──────────┘
-                                  │                   │
+                          │   v1       /v1/*        JSON only     │
+                          │   validate /v1/validate JSON only     │
+                          │   ui       /ui/v1/*     HTML only     │
+                          │                                      │
+                          │            both call ↓                │
+                          │        ┌──────────────────┐          │
+                          │        │   AuthService    │          │
+                          │        └────────┬─────────┘          │
+                          └─────────────────┼────────────────────┘
+                                  ┌─────────┴─────────┐
                           ┌───────▼────────┐  ┌───────▼────────┐
                           │ Drizzle + pg   │  │ ioredis        │
                           │ Postgres :5434 │  │ Redis :6381    │
@@ -254,7 +263,8 @@ friction.
         │
         ├─ loadPending()  → replayed? wrong purpose? fingerprint mismatch → burn + 401
         ├─ otpauth verify (window: 1)   counter iam.totp.verifications{outcome,stage}
-        ├─ pending.spend()              DEL + SETEX pending:spent:<sha> 900
+        ├─ pending.spend() → boolean    MULTI[DEL, SETEX]; DEL's reply names the winner
+        │     └─ false ⇒ a concurrent caller claimed it first → 401, no session
         └─ issueSession()               span iam.session.issue
              └─ HSET session:<sha256(token)> EX 1800 ; SADD sessions:user:<id>
         ▼
@@ -282,6 +292,27 @@ friction.
                                  ▼
                     issuePending(purpose=enrol, ttl=600)
 ```
+
+#### The two surfaces, and how a screen is served
+
+```
+   ── without JavaScript ────────────────────────────────────────────
+   GET  /ui/v1/login              → 200 HTML   (one response, nothing else loads)
+   POST /ui/v1/login   form       → AuthService.login()
+                                    ├─ ok       303 → /ui/v1/login/authenticator
+                                    └─ refused  200 HTML, same screen, message inline
+
+   ── with JavaScript ───────────────────────────────────────────────
+   GET  /ui/v1/login              → 200 HTML + ~1.3 KB inline script
+   POST /v1/login      json       → 200 StartResponse
+                                    script maps status → next screen, location.assign()
+
+   Both paths run the same AuthService method. Only the rendering differs.
+```
+
+`/v1` never emits HTML and `/ui/v1` never emits JSON. The screens are rendered server-side from
+template literals — no framework, no bundler, no hydration — under
+`default-src 'none'` with per-request nonces, so the page loads nothing at all from anywhere.
 
 #### Request id ↔ trace id, via AsyncLocalStorage
 
@@ -324,7 +355,10 @@ Every Python module has one TypeScript counterpart. Paths are `src/` relative.
 | `schemas/v1.py` | `schemas/v1.ts` | Zod: `RegisterRequest`, `LoginRequest`, `LoginTotpRequest`, `StartResponse`, `TokenResponse`, `LoginStatus`. The two `Browser*` subclasses are **not** ported — `/ui/v1` returns HTML |
 | `schemas/validate.py` | `schemas/validate.ts` | `ValidateResponse`, `HEADER_*` |
 | `schemas/auth.py` | `schemas/auth.ts` | `MeResponse`, `RecoveryLoginRequest`, `PasswordChangeRequest` |
-| `routers/*.py` | `routes/*.ts` | one Fastify plugin each |
+| `routers/v1.py`, `routers/auth.py` | `routes/v1.ts` | one plugin; `auth.py`'s four routes fold in as `/v1/me`, `/v1/logout/all`, `/v1/password/change`, `/v1/login/recovery` |
+| `routers/validate.py` | `routes/validate.ts` | `/v1/validate` |
+| `routers/login.py` | `routes/ui.ts` | the five screens under `/ui/v1`, HTML only |
+| `routers/health.py` | `routes/health.ts` | unversioned probes |
 | `templates.py` | `views/templates.ts` | `PAGE`, `CSS`, `JS`, `FORM_*` template literals |
 | `qr.py` | `views/qr.ts` | `qrSvg()` |
 | `errors.py` | `errors.ts` | `AppError` hierarchy, `problemDetails()`, `registerErrorHandler()` |
@@ -354,7 +388,7 @@ class AuthService {
 }
 ```
 
-### c.d) The four places a naive port goes wrong
+### c.d) The six places a naive port goes wrong
 
 These are the reason this is a careful migration rather than a transliteration.
 
@@ -378,6 +412,18 @@ credential-shaped attribute name, and `service_id` is attached only *after* the 
 verifies — otherwise a caller mints unbounded time series. Both properties must survive, with
 their tests.
 
+**5. Check-then-act on the pending handle.** The Python reads the handle, verifies the code,
+then spends it — and discards `DEL`'s reply, so a concurrent loser is never told it lost and
+issues a session anyway. **This is a live bug being ported, not a translation risk**: two
+callers with one handle and one valid code both get a session. The Node version must treat
+`spend()` as a claim that returns a boolean, and refuse when it is false. No Lua — `DEL` inside
+`MULTI/EXEC` already names exactly one winner.
+
+**6. Check-then-act on recovery codes.** The same shape in Postgres: `SELECT … WHERE used_at IS
+NULL`, verify, `UPDATE`. Two concurrent requests with one code both see it unused. The database
+must pick the winner — `UPDATE … WHERE used_at IS NULL … RETURNING`, and no row returned means
+someone else spent it.
+
 ### c.e) Docker
 
 | File | Target | Contents |
@@ -400,16 +446,17 @@ Each stage ends with its ported tests passing.
 
 | # | Stage | Gate |
 |---|---|---|
-| 0 | This document | — |
-| 1 | Move Python; scaffold Node (**Node is not yet installed**) | `pnpm check` |
+| 0 | This document | ✅ done |
+| 1 | Move Python; scaffold Node | ✅ done — `pnpm check` green, `/healthz` and `/readyz` verified live |
+| 1b | **Apply the review**: Node 24.20.0, exact version pins, `.nvmrc` | `pnpm check` |
 | 2 | Config + Drizzle schema + one initial migration | migration applies and reverses |
 | 3 | Security primitives | unit tests, incl. the timing-safe port |
 | 4 | Session and pending stores | Redis key/TTL tests |
 | 5 | `AuthService` | registration race, **pending-handle race**, **recovery-code race**, recovery-before-enrolment |
-| 6 | `/v1`, `/api/v1/auth`, `/v1/validate`, health | contract tests |
+| 6 | `/v1/*` (all ten, incl. the four renamed), `/v1/validate`, health | contract tests, JSON only |
 | 7 | `/ui/v1` screens, GET and POST, HTML only | no-JS **and** scripted paths |
 | 8 | Observability | span/counter/PII tests |
-| 9 | CLI and scripts | — |
+| 9 | CLI, scripts, **parity fixtures + differ** | byte-level diff against `:8001` |
 | 10 | Docker, Railway, README | all-in-one image actually run |
 
 ### c.g) Verification
