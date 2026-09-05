@@ -174,12 +174,17 @@ identically. Design at (c.d).
 
 ### 7. "Pin versions; consider Node 24"
 
-**Verdict: accepted, and Node 24 is free.**
+**Verdict: accepted.**
 
 ```
-v24.20.0  (Latest LTS: Krypton)     ← already installed via nvm
-v22.23.2  (Maintenance LTS)         ← what the scaffold currently uses
+v24.20.0  (Latest LTS: Krypton)     ← installed during stage 1b
+v22.23.2  (Maintenance LTS)         ← what the scaffold used until then
 ```
+
+*Correction:* an earlier draft of this document said 24.20.0 was already installed. It was not
+— the check that produced that claim grepped version strings out of `nvm ls`, which prints
+unresolved aliases (`lts/* -> lts/krypton (-> N/A)`) alongside installed versions, so a version
+that existed only as an alias target read as present. `nvm install 24.20.0` was needed.
 
 Node 22 entered maintenance when 24 became Active LTS. For a service being written now there is
 no argument for starting on the older line, and 24.20.0 is already on this machine, so the
