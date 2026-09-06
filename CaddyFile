@@ -1,0 +1,10 @@
+http://md.plans {
+    root * /Users/anudeepchandrapaul/Projects/github.com/AnudeepChPaul/markdown_plans
+
+    @markdown path *.md
+    rewrite @markdown /markdown.html
+
+    templates
+    file_server browse
+}
+

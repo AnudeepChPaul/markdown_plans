@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>{{ .OriginalReq.URL.Path }}</title>
+
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: "strict"
+    });
+  </script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: #24292f;
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Helvetica,
+        Arial,
+        sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* =========================================================
+           Sticky navigation toolbar
+           ========================================================= */
+
+    .markdown-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      min-height: 52px;
+      padding: 8px 16px;
+
+      background: rgba(255, 255, 255, 0.95);
+      border-bottom: 1px solid #d0d7de;
+
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .markdown-navigation {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .markdown-toolbar button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      min-height: 32px;
+      padding: 5px 12px;
+
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+
+      background: #f6f8fa;
+      color: #24292f;
+
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+
+      cursor: pointer;
+
+      transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease;
+    }
+
+    .markdown-toolbar button:hover:not(:disabled) {
+      background: #eaeef2;
+      border-color: #afb8c1;
+    }
+
+    .markdown-toolbar button:active:not(:disabled) {
+      background: #d8dee4;
+    }
+
+    .markdown-toolbar button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    #markdown-position {
+      min-width: 55px;
+      text-align: center;
+      color: #57606a;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* =========================================================
+           Markdown content
+           ========================================================= */
+
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 32px 32px 80px;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+
+    h1 {
+      margin-top: 0;
+      padding-bottom: 0.3em;
+      font-size: 2em;
+      border-bottom: 1px solid #d0d7de;
+    }
+
+    h2 {
+      padding-bottom: 0.3em;
+      font-size: 1.5em;
+      border-bottom: 1px solid #d0d7de;
+    }
+
+    h3 {
+      font-size: 1.25em;
+    }
+
+    h4 {
+      font-size: 1em;
+    }
+
+    h5 {
+      font-size: 0.875em;
+    }
+
+    h6 {
+      color: #59636e;
+      font-size: 0.85em;
+    }
+
+    p {
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+
+    a {
+      color: #0969da;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* =========================================================
+           Code
+           ========================================================= */
+
+    code {
+      padding: 0.2em 0.4em;
+
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        SF Mono,
+        Menlo,
+        Consolas,
+        "Liberation Mono",
+        monospace;
+
+      font-size: 85%;
+
+      background: #eff1f3;
+      border-radius: 6px;
+    }
+
+    pre {
+      margin-top: 0;
+      margin-bottom: 16px;
+      padding: 16px;
+      overflow-x: auto;
+
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        SF Mono,
+        Menlo,
+        Consolas,
+        "Liberation Mono",
+        monospace;
+
+      font-size: 85%;
+      line-height: 1.45;
+
+      background: #f6f8fa;
+      border-radius: 6px;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      border-radius: 0;
+    }
+
+    /* =========================================================
+           Blockquotes
+           ========================================================= */
+
+    blockquote {
+      margin: 0 0 16px;
+      padding: 0 1em;
+
+      color: #59636e;
+
+      border-left: 0.25em solid #d0d7de;
+    }
+
+    /* =========================================================
+           Lists
+           ========================================================= */
+
+    ul,
+    ol {
+      margin-top: 0;
+      margin-bottom: 16px;
+      padding-left: 2em;
+    }
+
+    li+li {
+      margin-top: 0.25em;
+    }
+
+    /* =========================================================
+           Tables
+           ========================================================= */
+
+    table {
+      width: 100%;
+      margin-bottom: 16px;
+
+      border-spacing: 0;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 6px 13px;
+      border: 1px solid #d0d7de;
+    }
+
+    th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+
+    tr:nth-child(even) {
+      background: #f6f8fa;
+    }
+
+    /* =========================================================
+           Images
+           ========================================================= */
+
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* =========================================================
+           Horizontal rule
+           ========================================================= */
+
+    hr {
+      height: 0.25em;
+      margin: 24px 0;
+      padding: 0;
+
+      background: #d0d7de;
+      border: 0;
+    }
+
+    /* =========================================================
+           Mermaid
+           ========================================================= */
+
+    .mermaid {
+      margin: 24px 0;
+      overflow-x: auto;
+      text-align: center;
+    }
+
+    /* =========================================================
+           Mobile
+           ========================================================= */
+
+    @media (max-width: 700px) {
+      .markdown-toolbar {
+        padding: 8px 10px;
+      }
+
+      .markdown-toolbar button {
+        padding: 5px 9px;
+      }
+
+      #markdown-position {
+        min-width: 45px;
+      }
+
+      main {
+        padding: 24px 16px 60px;
+      }
+
+      body {
+        font-size: 15px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- =========================================================
+         Navigation toolbar
+         ========================================================= -->
+
+  <div class="markdown-toolbar">
+
+    <button type="button" id="back-button" onclick="history.back()">
+      ← Back
+    </button>
+
+    <div class="markdown-navigation">
+
+      <button type="button" id="previous-markdown" disabled>
+        ← Previous
+      </button>
+
+      <span id="markdown-position"></span>
+
+      <button type="button" id="next-markdown" disabled>
+        Next →
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <!-- =========================================================
+         Rendered Markdown
+         ========================================================= -->
+
+  <main>
+    {{ markdown (include .OriginalReq.URL.Path) }}
+  </main>
+
+
+  <!-- =========================================================
+         Navigation logic
+         ========================================================= -->
+
+  <script>
+    (async function () {
+
+      /*
+       * The URL of the Markdown file currently being rendered.
+       *
+       * Example:
+       *
+       * /my-project/foo.md
+       */
+
+      const currentPath =
+        "{{ .OriginalReq.URL.Path }}";
+
+
+      /*
+       * Convert the current URL into a proper URL object.
+       *
+       * This lets the browser handle URL encoding/decoding
+       * correctly instead of us manually manipulating strings.
+       */
+
+      const currentUrl =
+        new URL(
+          currentPath,
+          window.location.origin
+        );
+
+
+      /*
+       * Current filename.
+       *
+       * Example:
+       *
+       * /my-project/foo.md
+       *                 ↑
+       *               foo.md
+       */
+
+      const currentFile =
+        decodeURIComponent(
+          currentUrl.pathname
+            .split("/")
+            .pop()
+        );
+
+
+      /*
+       * Current directory.
+       *
+       * Example:
+       *
+       * /my-project/foo.md
+       * ↓
+       * /my-project/
+       */
+
+      const directoryUrl =
+        new URL(
+          "./",
+          currentUrl
+        );
+
+
+      const previousButton =
+        document.getElementById(
+          "previous-markdown"
+        );
+
+      const nextButton =
+        document.getElementById(
+          "next-markdown"
+        );
+
+      const position =
+        document.getElementById(
+          "markdown-position"
+        );
+
+
+      try {
+
+        /*
+         * Fetch Caddy's directory listing.
+         */
+
+        const response =
+          await fetch(
+            directoryUrl.href
+          );
+
+
+        if (!response.ok) {
+          throw new Error(
+            `Directory request failed: ${response.status}`
+          );
+        }
+
+
+        const directoryHtml =
+          await response.text();
+
+
+        /*
+         * Parse the HTML returned by Caddy.
+         */
+
+        const parser =
+          new DOMParser();
+
+        const directoryDocument =
+          parser.parseFromString(
+            directoryHtml,
+            "text/html"
+          );
+
+
+        /*
+         * Get all links from Caddy's directory listing.
+         *
+         * We intentionally preserve their order.
+         *
+         * NO SORTING.
+         */
+
+        const links =
+          Array.from(
+            directoryDocument
+              .querySelectorAll("a[href]")
+          );
+
+
+        /*
+         * Convert links into filenames.
+         */
+
+        const markdownFiles = [];
+
+        for (const link of links) {
+
+          const href =
+            link.getAttribute("href");
+
+          if (!href) {
+            continue;
+          }
+
+
+          /*
+           * Resolve the link against the directory URL.
+           */
+
+          const fileUrl =
+            new URL(
+              href,
+              directoryUrl
+            );
+
+
+          /*
+           * Only consider files ending in .md.
+           */
+
+          if (
+            !fileUrl.pathname
+              .toLowerCase()
+              .endsWith(".md")
+          ) {
+            continue;
+          }
+
+
+          /*
+           * Extract filename.
+           */
+
+          const filename =
+            decodeURIComponent(
+              fileUrl.pathname
+                .split("/")
+                .pop()
+            );
+
+
+          markdownFiles.push({
+            filename: filename,
+            url: fileUrl.href
+          });
+        }
+
+
+        /*
+         * Find the current Markdown file.
+         */
+
+        const currentIndex =
+          markdownFiles.findIndex(
+            file =>
+              file.filename === currentFile
+          );
+
+
+        /*
+         * Couldn't find current file.
+         */
+
+        if (currentIndex === -1) {
+
+          console.warn(
+            "Current Markdown file was not found in Caddy directory listing.",
+            {
+              currentFile,
+              markdownFiles
+            }
+          );
+
+          return;
+        }
+
+
+        /*
+         * Display:
+         *
+         *     2 / 5
+         */
+
+        position.textContent =
+          `${currentIndex + 1} / ${markdownFiles.length}`;
+
+
+        /*
+         * =================================================
+         * Previous
+         * =================================================
+         */
+
+        if (currentIndex > 0) {
+
+          previousButton.disabled = false;
+
+          previousButton.addEventListener(
+            "click",
+            function () {
+
+              window.location.href =
+                markdownFiles[
+                  currentIndex - 1
+                ].url;
+
+            }
+          );
+        }
+
+
+        /*
+         * =================================================
+         * Next
+         * =================================================
+         */
+
+        if (
+          currentIndex <
+          markdownFiles.length - 1
+        ) {
+
+          nextButton.disabled = false;
+
+          nextButton.addEventListener(
+            "click",
+            function () {
+
+              window.location.href =
+                markdownFiles[
+                  currentIndex + 1
+                ].url;
+
+            }
+          );
+        }
+
+
+        /*
+         * =================================================
+         * Keyboard navigation
+         * =================================================
+         *
+         * Left arrow  → Previous
+         * Right arrow → Next
+         * Escape      → Back
+         */
+
+        document.addEventListener(
+          "keydown",
+          function (event) {
+
+            /*
+             * Don't hijack keyboard shortcuts while
+             * typing into an input/textarea.
+             */
+
+            const tag =
+              event.target.tagName
+                .toLowerCase();
+
+            if (
+              tag === "input" ||
+              tag === "textarea" ||
+              tag === "select"
+            ) {
+              return;
+            }
+
+
+            /*
+             * Previous
+             */
+
+            if (
+              event.key === "ArrowLeft" &&
+              !previousButton.disabled
+            ) {
+
+              event.preventDefault();
+
+              window.location.href =
+                markdownFiles[
+                  currentIndex - 1
+                ].url;
+            }
+
+
+            /*
+             * Next
+             */
+
+            if (
+              event.key === "ArrowRight" &&
+              !nextButton.disabled
+            ) {
+
+              event.preventDefault();
+
+              window.location.href =
+                markdownFiles[
+                  currentIndex + 1
+                ].url;
+            }
+
+
+            /*
+             * Back
+             */
+
+            if (
+              event.key === "Escape"
+            ) {
+
+              event.preventDefault();
+
+              history.back();
+            }
+
+          }
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          "Unable to determine Markdown navigation:",
+          error
+        );
+
+      }
+
+    })();
+    document
+      .getElementById("back-button")
+      .addEventListener("click", function () {
+        const parts = window.location.pathname.split("/");
+
+        parts.pop();
+
+        const parentPath = parts.join("/") + "/";
+
+        window.location.href = parentPath;
+      });
+  </script>
+
+</body>
+
+</html>

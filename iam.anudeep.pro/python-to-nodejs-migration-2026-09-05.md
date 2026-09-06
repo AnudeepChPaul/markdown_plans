@@ -424,6 +424,42 @@ NULL`, verify, `UPDATE`. Two concurrent requests with one code both see it unuse
 must pick the winner — `UPDATE … WHERE used_at IS NULL … RETURNING`, and no row returned means
 someone else spent it.
 
+### c.e) Module paths
+
+Every cross-module import is absolute: `@iam/src/security/tokens.js`, never `../../security/…`.
+
+The mechanism matters more than it looks. The obvious approach — `@src/*` in tsconfig `paths` —
+**does not work**, and fails in the worst possible way:
+
+```
+tsc emits:   import { hello } from "@src/a/dep.js";   ← verbatim, unrewritten
+node dist/:  ERR_MODULE_NOT_FOUND
+```
+
+TypeScript's `paths` steers *type resolution*; it never rewrites emitted JavaScript. The build
+succeeds, the tests pass under a bundler-aware runner, and the failure appears only when the
+built output runs — in production. Closing that needs `tsc-alias` or a bundler, i.e. a step
+that must never be skipped.
+
+**Package self-reference has no such trap.** `package.json` declares:
+
+```json
+{ "name": "@iam/src",
+  "exports": { "./*": { "development": "./src/*", "default": "./dist/*" } } }
+```
+
+Node resolves `@iam/src/…` from the package's own `name` and `exports` — verified to work with
+no `node_modules` entry at all, so nothing depends on how the installer happened to link
+things. The `development` condition points at TypeScript sources for `tsx` and Vitest; the
+`default` points at `dist/` for production, which runs plain `node` with no flags.
+
+Three places carry the condition and must stay in step: `pnpm dev` (`tsx watch
+--conditions=development …`), `vitest.config.ts` (`resolve.conditions`), and `tsconfig.json`
+(`customConditions`). Without the last one `tsc` takes the `default` branch and cannot
+typecheck a clean checkout, because `dist/` does not exist yet.
+
+A bare `@src` is not available: npm requires a scoped name to be `@scope/name`.
+
 ### c.e) Docker
 
 | File | Target | Contents |
